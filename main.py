@@ -33,7 +33,7 @@ class MainWindow(QMainWindow):
 
     def load_weights_options(self):
         self.ui.combo_box_weights.clear()
-        weight_path_iter=QDirIterator('./dashcamcleaner/weights',{'*.pt'},flags=QDirIterator.Subdirectories)
+        weight_path_iter=QDirIterator('./dashcamcleaner/weights',['*.pt'],flags=QDirIterator.Subdirectories)
         while weight_path_iter.hasNext():
             net_path=weight_path_iter.next()
             clean_name = os.path.splitext(os.path.basename(net_path))[0]
@@ -111,7 +111,7 @@ class MainWindow(QMainWindow):
         Callback for button_source
         """
         source_dir_path=QFileDialog.getExistingDirectory(self,"Open File")
-        self.source_paths_iter=QDirIterator(source_dir_path,{'*.mkv','*.avi' ,'*.mov' ,'*.mp4'},flags=QDirIterator.Subdirectories)
+        self.source_paths_iter=QDirIterator(source_dir_path,['*.mkv','*.avi' ,'*.mov' ,'*.mp4'],flags=QDirIterator.Subdirectories)
         # source_path, _ = QFileDialog.getOpenFileName(self, "Open Video", "", "Video Files (*.mkv *.avi *.mov *.mp4)")
         self.ui.line_source.setText(source_dir_path)
 
@@ -151,7 +151,7 @@ class MainWindow(QMainWindow):
                 name = obj.objectName()
                 value = self.settings.value(name)
                 if name=='line_source':
-                    self.source_paths_iter=QDirIterator(value,{'*.mkv','*.avi' ,'*.mov' ,'*.mp4'},flags=QDirIterator.Subdirectories)
+                    self.source_paths_iter=QDirIterator(value,['*.mkv','*.avi' ,'*.mov' ,'*.mp4'],flags=QDirIterator.Subdirectories)
                     obj.setText(value)
                 elif name=='line_target':
                     self.target_path=value
