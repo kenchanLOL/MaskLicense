@@ -22,7 +22,7 @@ class VideoBlurrer(QThread):
         super(VideoBlurrer, self).__init__()
         self.parameters = parameters
         self.detections = []
-        weights_path = os.path.join("weights", f"{weights_name}.pt")
+        weights_path = os.path.join("./dashcamcleaner/weights", f"{weights_name}.pt")
         self.detector = setup_detector(weights_path)
         self.result = {"success": False, "elapsed_time": 0}
         print("Worker created")
@@ -64,17 +64,17 @@ class VideoBlurrer(QThread):
                     (blur_size * 2 + 1, blur_size * 2 + 1))
                 cv2.rectangle
 
-            elif detection.kind == "face":
-                center, axes = detection.ellipse_coordinates()
-                # blur rectangle around face
-                temp[outer_box.coords_as_slices()] = cv2.blur(
-                    temp[outer_box.coords_as_slices()], (blur_size * 2 + 1, blur_size * 2 + 1))
-                # add ellipse to mask
-                cv2.ellipse(mask, center, axes, 0, 0, 360, (255, 255, 255), -1)
+
+            # elif detection.kind == "face":
+            #     center, axes = detection.ellipse_coordinates()
+            #     # blur rectangle around face
+            #     temp[outer_box.coords_as_slices()] = cv2.blur(
+            #         temp[outer_box.coords_as_slices()], (blur_size * 2 + 1, blur_size * 2 + 1))
+            #     # add ellipse to mask
+            #     cv2.ellipse(mask, center, axes, 0, 0, 360, (255, 255, 255), -1)
 
             else:
-                raise ValueError(
-                    f"Detection kind not supported: {detection.kind}")
+                raise ValueError(f"Detection kind not supported: {detection.kind}")
 
         # apply mask to blur faces too
         mask_inverted = cv2.bitwise_not(mask)
@@ -92,83 +92,95 @@ class VideoBlurrer(QThread):
         results = self.detector(image, size=scale)
         boxes = []
         for res in results.xyxy[0]:
-            detection_kind = "plate" if res[5].item() == 0 else "face"
-            boxes.append(Box(res[0].item(), res[1].item(), res[2].item(
-            ), res[3].item(), res[4].item(), detection_kind))
+            if res[5].item()==0:
+                detection_kind = "plate"
+                boxes.append(Box(res[0].item(), res[1].item(), res[2].item(), res[3].item(), res[4].item(), detection_kind))
         return boxes
 
     def run(self):
         """
         Write a copy of the input video stripped of identifiable information, i.e. faces and license plates
         """
+        iter=self.parameters["input_path_iter"]
+        print('File_name,Num_of_frames,Time_used')
+        while (iter.hasNext()):
+            self.parameters['input_path_Cur']=iter.next()
+            # reset success and start timer
+            self.result["success"] = False
+            start = timer()
+           
+            # gather inputs from self.parameters
+            
+            input_path = self.parameters["input_path_Cur"]
+            # print('path name: '+input_path)
+            fname=input_path.rsplit('/',1)[-1]
+            # temp_output = f"{os.path.splitext(self.parameters['output_path'])[0]}_copy{os.path.splitext(self.parameters['output_path'])[1]}"
+            output_path = self.parameters["output_path"]+'/'+fname
+            # print(output_path)
+            threshold = self.parameters["threshold"]
+            # print(f"Worker of {fname} started")
+            # customize detector
+            self.detector.conf = threshold
 
-        # reset success and start timer
-        self.result["success"] = False
-        start = timer()
+            # open video file
+            cap = cv2.VideoCapture(input_path)
 
-        # gather inputs from self.parameters
-        print("Worker started")
-        input_path = self.parameters["input_path"]
-        temp_output = f"{os.path.splitext(self.parameters['output_path'])[0]}_copy{os.path.splitext(self.parameters['output_path'])[1]}"
-        output_path = self.parameters["output_path"]
-        threshold = self.parameters["threshold"]
+            # get the height and width of each frame
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
 
-        # customize detector
-        self.detector.conf = threshold
+            # save the video to a file
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+            # print(f'File name:{fname}')
+            # print(f'Number of frame: {length}')
+            # print('Result:')
+            # update GUI's progress bar on its maximum frames
+            self.setMaximum.emit(length)
 
-        # open video file
-        cap = cv2.VideoCapture(input_path)
+            if cap.isOpened() == False:
+                # print(f'error at video {fname}')
+                print(str(fname)+','+str(length)+','+'-1')
+                continue
 
-        # get the height and width of each frame
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
+            # loop through video
+            current_frame = 0
+            while cap.isOpened():
+                ret, frame = cap.read()
 
-        # save the video to a file
-        fourcc = cv2.VideoWriter_fourcc(*'avc1')
-        writer = cv2.VideoWriter(temp_output, fourcc, fps, (width, height))
+                if ret == True:
+                    new_detections = self.detect_identifiable_information(frame.copy())
+                    frame = self.apply_blur(frame, new_detections)
+                    writer.write(frame)
+                    print(current_frame)
 
-        # update GUI's progress bar on its maximum frames
-        self.setMaximum.emit(length)
+                else:
+                    break
+                current_frame += 1
+                self.updateProgress.emit(current_frame)
+            
+            
+            self.detections = []
+            cap.release()
+            writer.release()
 
-        if cap.isOpened() == False:
-            print('error file not found')
-            return
+            ## copy over audio stream from original video to edited video
+            #ffmpeg_exe = os.getenv("FFMPEG_BINARY")
+            #subprocess.run(
+            #    [ffmpeg_exe, "-y", "-i", temp_output, "-i", input_path, "-c", "copy", "-map", "0:0", "-map", "1:1",
+            #     "-shortest", output_path])
 
-        # loop through video
-        current_frame = 0
-        while cap.isOpened():
-            ret, frame = cap.read()
+            # delete temporary output that had no audio track
+            # os.remove(temp_output)
 
-            if ret == True:
-                new_detections = self.detect_identifiable_information(
-                    frame.copy())
-                frame = self.apply_blur(frame, new_detections)
-                writer.write(frame)
+            ## store sucess and elapsed time
+            self.result["success"] = True
+            self.result["elapsed_time"] = timer() - start
+            used_time=self.result["elapsed_time"]
+            print(str(fname)+','+str(length)+','+str(used_time))
 
-            else:
-                break
-
-            current_frame += 1
-            self.updateProgress.emit(current_frame)
-
-        self.detections = []
-        cap.release()
-        writer.release()
-
-        # # copy over audio stream from original video to edited video
-        # ffmpeg_exe = os.getenv("FFMPEG_BINARY")
-        # subprocess.run(
-        #     [ffmpeg_exe, "-y", "-i", temp_output, "-i", input_path, "-c", "copy", "-map", "0:0", "-map", "1:1",
-        #      "-shortest", output_path])
-
-        # delete temporary output that had no audio track
-        os.remove(temp_output)
-
-        # store sucess and elapsed time
-        self.result["success"] = True
-        self.result["elapsed_time"] = timer() - start
 
 
 def setup_detector(weights_path: str):
@@ -179,8 +191,7 @@ def setup_detector(weights_path: str):
     """
     model = torch.hub.load('ultralytics/yolov5', 'custom', weights_path)
     if torch.cuda.is_available():
-        print(
-            f"Using {torch.cuda.get_device_name(torch.cuda.current_device())}.")
+        print(f"Using {torch.cuda.get_device_name(torch.cuda.current_device())}.")
         model.cuda()
         torch.backends.cudnn.benchmark = True
     else:
