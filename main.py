@@ -1,10 +1,9 @@
 import inspect
 import os
 import sys
-import time
 from glob import glob
 
-from PySide2.QtCore import QSettings
+from PySide2.QtCore import QDirIterator, QSettings
 from PySide2.QtWidgets import QApplication, QMainWindow, QFileDialog
 from PySide2.QtWidgets import QSpinBox, QDoubleSpinBox, QLineEdit, QRadioButton, QMessageBox, QComboBox
 
@@ -30,12 +29,13 @@ class MainWindow(QMainWindow):
         self.ui.button_start.clicked.connect(self.button_start_clicked)
         self.ui.button_target.clicked.connect(self.button_target_clicked)
         self.ui.button_abort.clicked.connect(self.button_abort_clicked)
-        self.ui.combo_box_weights.currentIndexChanged.connect(
-            self.setup_blurrer)
+        self.ui.combo_box_weights.currentIndexChanged.connect(self.setup_blurrer)
 
     def load_weights_options(self):
         self.ui.combo_box_weights.clear()
-        for net_path in glob('./weights/*.pt'):
+        weight_path_iter=QDirIterator('./dashcamcleaner/weights',{'*.pt'},flags=QDirIterator.Subdirectories)
+        while weight_path_iter.hasNext():
+            net_path=weight_path_iter.next()
             clean_name = os.path.splitext(os.path.basename(net_path))[0]
             self.ui.combo_box_weights.addItem(clean_name)
         self.setup_blurrer()
@@ -45,13 +45,12 @@ class MainWindow(QMainWindow):
         Create and connect a blurrer thread
         """
         weights_name = self.ui.combo_box_weights.currentText()
-        # print(self.ui.combo_box_weights.currentText())
         self.blurrer = VideoBlurrer(weights_name)
         self.blurrer.setMaximum.connect(self.setMaximumValue)
         self.blurrer.updateProgress.connect(self.setProgress)
         self.blurrer.finished.connect(self.blurrer_finished)
         # msg_box = QMessageBox()
-        # msg_box.setText(f'Successfully loaded {weights_name}.pt')
+        # msg_box.setText(f"Successfully loaded {weights_name}.pt")
         # msg_box.exec_()
 
     def button_abort_clicked(self):
@@ -69,7 +68,6 @@ class MainWindow(QMainWindow):
         Set progress bar's current progress
         :param value: progress to be set
         """
-        print(value)
         self.ui.progress.setValue(value)
 
     def setMaximumValue(self, value: int):
@@ -88,14 +86,13 @@ class MainWindow(QMainWindow):
         self.ui.button_start.setEnabled(False)
 
         # read inference size
-        inference_size = int(self.ui.combo_box_scale.currentText()[
-                             :-1]) * 16 / 9  # ouch again
-        batch_size=60
-        # set up parameters 
-        # add a for loop and determine the batch size
+        inference_size = int(self.ui.combo_box_scale.currentText()[:-1]) * 16 / 9 # ouch again
+
+        # set up parameters
         parameters = {
-            # "input_path":
-            # "output_path": self.ui.line_target.text(),
+            "input_path_iter": self.source_paths_iter,
+            "input_path_Cur":'',
+            "output_path": self.target_path,
             "blur_size": self.ui.spin_blur.value(),
             "blur_memory": self.ui.spin_memory.value(),
             "threshold": self.ui.double_spin_threshold.value(),
@@ -107,37 +104,23 @@ class MainWindow(QMainWindow):
             self.blurrer.start()
         else:
             print("No blurrer object!")
-        self.start = time.perf_counter()
-        print(self.start)
         print("Blurrer started!")
 
     def button_source_clicked(self):
         """
         Callback for button_source
         """
-        source_path, _ = QFileDialog.getOpenFileNames(
-            self, "Open Video", "", "Video Files (*.mkv *.avi *.mov *.mp4)")
-        # store full path
-        self.source_paths=source_path
-        # only store video file name
-        self.newPaths=[]
-        for path in source_path:
-            self.newPaths.append(path.split('/')[-1])
-        pathSting=' , '.join(self.newPaths)
-        self.ui.line_source.setText(pathSting)
+        source_dir_path=QFileDialog.getExistingDirectory(self,"Open File")
+        self.source_paths_iter=QDirIterator(source_dir_path,{'*.mkv','*.avi' ,'*.mov' ,'*.mp4'},flags=QDirIterator.Subdirectories)
+        # source_path, _ = QFileDialog.getOpenFileName(self, "Open Video", "", "Video Files (*.mkv *.avi *.mov *.mp4)")
+        self.ui.line_source.setText(source_dir_path)
 
     def button_target_clicked(self):
         """
         Callback for button_target
         """
-        target_path_pattern, _ = QFileDialog.getSaveFileName(
-            self, "Save Video Naming style(input ? in place that use the same name as input file)", "", "Video Files (*.avi)")
-        dir_name,file_patten=target_path_pattern.rsplit('/',1)
-        self.target_paths=[]
-        for path in self.newPaths:
-            file_name=file_patten.replace('$',path.split('.')[0])
-            self.target_paths.append('/'.join([dir_name,file_name]))
-        self.ui.line_target.setText('/'.join([dir_name,file_patten.replace('$','{'+'Name'+'}')]))
+        self.target_path= QFileDialog.getExistingDirectory(self, "Save File")
+        self.ui.line_target.setText(self.target_path)
 
     def force_blurrer_quit(self):
         """
@@ -151,7 +134,6 @@ class MainWindow(QMainWindow):
         """
         Restores relevent UI settings from ini file
         """
-        # switch case statement can be implemented
         for name, obj in inspect.getmembers(self.ui):
             if isinstance(obj, QSpinBox):
                 name = obj.objectName()
@@ -168,7 +150,11 @@ class MainWindow(QMainWindow):
             if isinstance(obj, QLineEdit):
                 name = obj.objectName()
                 value = self.settings.value(name)
-                if value:
+                if name=='line_source':
+                    self.source_paths_iter=QDirIterator(value,{'*.mkv','*.avi' ,'*.mov' ,'*.mp4'},flags=QDirIterator.Subdirectories)
+                    obj.setText(value)
+                elif name=='line_target':
+                    self.target_path=value
                     obj.setText(value)
 
             if isinstance(obj, QRadioButton):
@@ -197,16 +183,10 @@ class MainWindow(QMainWindow):
         if self.blurrer and self.blurrer.result["success"]:
             minutes = int(self.blurrer.result["elapsed_time"] // 60)
             seconds = round(self.blurrer.result["elapsed_time"] % 60)
-            msg_box.setText(
-                f"Video blurred successfully in {minutes} minutes and {seconds} seconds.")
+            msg_box.setText(f"Video blurred successfully in {minutes} minutes and {seconds} seconds.")
         else:
             msg_box.setText("Blurring resulted in errors.")
         msg_box.exec_()
-        self.end = time.perf_counter()
-        dur = (self.end-self.start)
-        dur_mins = dur//60
-        dur_sec = dur % 60
-        print(f'Use {dur_mins} Mins and {dur_sec} Secs')
         if not self.blurrer:
             self.setup_blurrer()
         self.ui.button_start.setEnabled(True)
@@ -217,7 +197,6 @@ class MainWindow(QMainWindow):
         """
         Save all relevant UI parameters
         """
-        # switch case statement can be implemented
         for name, obj in inspect.getmembers(self.ui):
             if isinstance(obj, QSpinBox):
                 name = obj.objectName()
