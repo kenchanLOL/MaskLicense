@@ -2,9 +2,10 @@ import inspect
 import os
 import sys
 from glob import glob
+import typing
 
 from PySide2.QtCore import QDirIterator, QSettings
-from PySide2.QtWidgets import QApplication, QMainWindow, QFileDialog
+from PySide2.QtWidgets import QApplication, QMainWindow, QFileDialog, QListView, QAbstractItemView, QTreeView
 from PySide2.QtWidgets import QSpinBox, QDoubleSpinBox, QLineEdit, QRadioButton, QMessageBox, QComboBox
 
 from src.blurrer import VideoBlurrer
@@ -20,6 +21,7 @@ class MainWindow(QMainWindow):
         self.receive_attempts = 0
         self.settings = QSettings("gui.ini", QSettings.IniFormat)
         self.blurrer = None
+        self.source_list=[]
         super(MainWindow, self).__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -33,7 +35,7 @@ class MainWindow(QMainWindow):
 
     def load_weights_options(self):
         self.ui.combo_box_weights.clear()
-        weight_path_iter=QDirIterator('./dashcamcleaner/weights',['*.pt'],flags=QDirIterator.Subdirectories)
+        weight_path_iter=QDirIterator('/home/ken/MaskLicense/weights',['*.pt'],flags=QDirIterator.Subdirectories)
         while weight_path_iter.hasNext():
             net_path=weight_path_iter.next()
             clean_name = os.path.splitext(os.path.basename(net_path))[0]
@@ -90,7 +92,7 @@ class MainWindow(QMainWindow):
 
         # set up parameters
         parameters = {
-            "input_path_iter": self.source_paths_iter,
+            "input_path_iter_list": self.source_list,
             "input_path_Cur":'',
             "output_path": self.target_path,
             "blur_size": self.ui.spin_blur.value(),
@@ -110,10 +112,30 @@ class MainWindow(QMainWindow):
         """
         Callback for button_source
         """
-        source_dir_path=QFileDialog.getExistingDirectory(self,"Open File")
-        self.source_paths_iter=QDirIterator(source_dir_path,['*.mkv','*.avi' ,'*.mov' ,'*.mp4'],flags=QDirIterator.Subdirectories)
+        # dialog=QFileDialog(self)
+        # dialog.setFileMode()
+        # source_dir_path=QFileDialog.getExistingDirectory(self,"Open File")
         # source_path, _ = QFileDialog.getOpenFileName(self, "Open Video", "", "Video Files (*.mkv *.avi *.mov *.mp4)")
-        self.ui.line_source.setText(source_dir_path)
+        # self.source_paths_iter=QDirIterator(source_dir_path,['*.mkv','*.avi' ,'*.mov' ,'*.mp4'],flags=QDirIterator.Subdirectories)
+        file_dialog = QFileDialog()
+        file_dialog.setFileMode(QFileDialog.DirectoryOnly)
+        file_dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        file_view = file_dialog.findChild(QListView, 'listView')
+
+        # to make it possible to select multiple directories:
+        if file_view:
+            file_view.setSelectionMode(QAbstractItemView.MultiSelection)
+            f_tree_view = file_dialog.findChild(QTreeView)
+        if f_tree_view:
+            f_tree_view.setSelectionMode(QAbstractItemView.MultiSelection)
+
+        if file_dialog.exec():
+            source_dir_paths = file_dialog.selectedFiles()
+
+        self.ui.line_source.setText(' , '.join(source_dir_paths))
+        self.source_list=[]
+        for path in source_dir_paths:
+            self.source_list.append(QDirIterator(path,['*.mkv','*.avi' ,'*.mov' ,'*.mp4'],flags=QDirIterator.Subdirectories))
 
     def button_target_clicked(self):
         """
@@ -151,7 +173,10 @@ class MainWindow(QMainWindow):
                 name = obj.objectName()
                 value = self.settings.value(name)
                 if name=='line_source':
-                    self.source_paths_iter=QDirIterator(value,['*.mkv','*.avi' ,'*.mov' ,'*.mp4'],flags=QDirIterator.Subdirectories)
+                    temp_list=value.split(' , ')
+                    for path in temp_list:
+                        self.source_list.append(QDirIterator(path,['*.mkv','*.avi' ,'*.mov' ,'*.mp4'],flags=QDirIterator.Subdirectories))
+
                     obj.setText(value)
                 elif name=='line_target':
                     self.target_path=value
