@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
     def load_weights_options(self):
         self.ui.combo_box_weights.clear()
         cur_dir=os.path.split(__file__)[0]
-        weight_path_iter=QDirIterator(cur_dir+'/weights',['*.pt'],flags=QDirIterator.Subdirectories)
+        weight_path_iter=QDirIterator(cur_dir+'/weights/raw_weight',['*.weights'],flags=QDirIterator.Subdirectories)
         while weight_path_iter.hasNext():
             net_path=weight_path_iter.next()
             clean_name = os.path.splitext(os.path.basename(net_path))[0]
