@@ -1,7 +1,9 @@
 import os
 import subprocess
 from timeit import default_timer as timer
-
+from tool.utils import *
+from tool.torch_utils import *
+from tool.darknet2pytorch import Darknet
 import cv2
 import numpy as np
 import torch
@@ -22,8 +24,9 @@ class VideoBlurrer(QThread):
         super(VideoBlurrer, self).__init__()
         self.parameters = parameters
         self.detections = []
-        weights_path = os.path.join("/home/ken/MaskLicense/weights", f"{weights_name}.pt")
-        self.detector = setup_detector(weights_path)
+        basefile_dir=os.path.split(__file__)[0].rsplit('/',1)[0]
+        weights_path = os.path.join(basefile_dir+"/weights", f"{weights_name}.pt")
+        self.detector = setup_detector(basefile_dir,weights_path)
         self.result = {"success": False, "elapsed_time": 0}
         print("Worker created")
 
@@ -88,10 +91,18 @@ class VideoBlurrer(QThread):
         :param image: input image
         :return: detected faces and plates
         """
-        scale = self.parameters["inference_size"]
-        results = self.detector(image, size=scale)
+        # scale = self.parameters["inference_size"]
+        # results = self.detector(image, size=scale)
+        model=self.detector
+        sized=cv2.resize(image,(model.width,model.height))
+        sized=cv2.cvtColor(sized,cv2.COLOR_BGR2RGB)
+        # self.detector
+        results=do_detect(model,sized,self.parameters["threshold"],0.6,torch.cuda.is_available())[0]
         boxes = []
-        for res in results.xyxy[0]:
+        # results_img=plot_boxes_cv2(sized,results,class_names='plate')
+        # cv2.imshow('Demo',results_img)
+        # cv2.waitKey(1)
+        for res in range(len(results)):
             if res[5].item()==0:
                 detection_kind = "plate"
                 boxes.append(Box(res[0].item(), res[1].item(), res[2].item(), res[3].item(), res[4].item(), detection_kind))
@@ -118,10 +129,10 @@ class VideoBlurrer(QThread):
                 # temp_output = f"{os.path.splitext(self.parameters['output_path'])[0]}_copy{os.path.splitext(self.parameters['output_path'])[1]}"
                 output_path = self.parameters["output_path"]+'/'+fname
                 # print(output_path)
-                threshold = self.parameters["threshold"]
+                # threshold = self.parameters["threshold"]
                 # print(f"Worker of {fname} started")
                 # customize detector
-                self.detector.conf = threshold
+                # self.detector.conf = threshold
 
                 # open video file
                 cap = cv2.VideoCapture(input_path)
@@ -181,13 +192,17 @@ class VideoBlurrer(QThread):
 
 
 
-def setup_detector(weights_path: str):
+def setup_detector(basefile_dir,weights_path: str):
     """
     Load YOLOv5 detector from torch hub and update the detector with this repo's weights
     :param weights_path: path to .pt file with this repo's weights
     :return: initialized yolov5 detector
     """
-    model = torch.hub.load('ultralytics/yolov5', 'custom', weights_path)
+    # model = torch.hub.load('ultralytics/yolov5', 'custom', weights_path)
+    cfg_path=basefile_dir+'/yolov4-obj.cfg'
+    model=Darknet(cfg_path)
+    model.print_network()
+    model.load_weights(weights_path)
     if torch.cuda.is_available():
         print(f"Using {torch.cuda.get_device_name(torch.cuda.current_device())}.")
         model.cuda()
