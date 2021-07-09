@@ -25,12 +25,12 @@ class VideoBlurrer(QThread):
         self.parameters = parameters
         self.detections = []
         basefile_dir=os.path.split(__file__)[0].rsplit('/',1)[0]
-        weights_path = os.path.join(basefile_dir+"/weights", f"{weights_name}.pt")
+        weights_path = os.path.join(basefile_dir+"/weights/raw_weight", f"{weights_name}.weights")
         self.detector = setup_detector(basefile_dir,weights_path)
         self.result = {"success": False, "elapsed_time": 0}
         print("Worker created")
 
-    def apply_blur(self, frame: np.array, new_detections: list):
+    def apply_blur(self, frame, new_detections):
         """
         Apply Gaussian blur to regions of interests
         :param frame: input image
@@ -38,6 +38,7 @@ class VideoBlurrer(QThread):
         :return: processed image
         """
         # gather inputs from self.parameters
+#         frame=np.copy(frame)
         blur_size = self.parameters["blur_size"]
         blur_memory = self.parameters["blur_memory"]
         roi_multi = self.parameters["roi_multi"]
@@ -52,7 +53,7 @@ class VideoBlurrer(QThread):
         # prepare copy and mask
         temp = frame.copy()
         mask = np.full((frame.shape[0], frame.shape[1], 1), 0, dtype=np.uint8)
-
+#         print(self.detections)
         for detection in [x[0] for x in self.detections]:
             # two-fold blurring: softer blur on the edge of the box to look smoother and less abrupt
             outer_box = detection
@@ -61,7 +62,8 @@ class VideoBlurrer(QThread):
             if detection.kind == "plate":
                 # blur in-place on frame
                 frame[outer_box.coords_as_slices()] = cv2.blur(
-                    frame[outer_box.coords_as_slices()], (blur_size, blur_size))
+                    frame[outer_box.coords_as_slices()], 
+                    (blur_size, blur_size))
                 frame[inner_box.coords_as_slices()] = cv2.blur(
                     frame[inner_box.coords_as_slices()],
                     (blur_size * 2 + 1, blur_size * 2 + 1))
@@ -85,7 +87,7 @@ class VideoBlurrer(QThread):
         blurred = cv2.bitwise_and(temp, temp, mask=mask)
         return cv2.add(background, blurred)
 
-    def detect_identifiable_information(self, image: np.array):
+    def detect_identifiable_information(self, image: np.array,width,height):
         """
         Run plate and face detection on an input image
         :param image: input image
@@ -100,12 +102,12 @@ class VideoBlurrer(QThread):
         results=do_detect(model,sized,self.parameters["threshold"],0.6,torch.cuda.is_available())[0]
         boxes = []
         # results_img=plot_boxes_cv2(sized,results,class_names='plate')
-        # cv2.imshow('Demo',results_img)
-        # cv2.waitKey(1)
-        for res in range(len(results)):
-            if res[5].item()==0:
+
+        for res in results:
+            # print(res)
+            if res[-1]==0:
                 detection_kind = "plate"
-                boxes.append(Box(res[0].item(), res[1].item(), res[2].item(), res[3].item(), res[4].item(), detection_kind))
+                boxes.append(Box(res[0]*width, res[1]*height, res[2]*width, res[3]*height, res[4], detection_kind))
         return boxes
 
     def run(self):
@@ -160,7 +162,7 @@ class VideoBlurrer(QThread):
                     ret, frame = cap.read()
 
                     if ret == True:
-                        new_detections = self.detect_identifiable_information(frame.copy())
+                        new_detections = self.detect_identifiable_information(frame.copy(),width,height)
                         frame = self.apply_blur(frame, new_detections)
                         writer.write(frame)
                         print(current_frame)
