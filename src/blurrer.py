@@ -57,12 +57,16 @@ class VideoBlurrer(QThread):
         self.detections = [[x[0], x[1] + 1] for x in self.detections if
                            x[1] <= blur_memory]  # throw out outdated detections, increase age by 1
         for detection in new_detections:
+            # print("before scale:")
+            # print(detection)
             scaled_detection = detection.scale(frame.shape, roi_multi)
+            # print("after scael:")
+            # print(scaled_detection)
             self.detections.append([scaled_detection, 0])
         # prepare copy and mask
         temp = frame.copy()
         mask = np.full((frame.shape[0], frame.shape[1], 1), 0, dtype=np.uint8)
-#         print(self.detections)
+#         print("blur box:")
         for detection in [x[0] for x in self.detections]:
             # two-fold blurring: softer blur on the edge of the box to look smoother and less abrupt
             outer_box = detection
@@ -70,7 +74,8 @@ class VideoBlurrer(QThread):
             # print(outer_box,inner_box)
             if detection.kind == "plate":
                 # blur in-place on frame
-                print(detection)
+#                 print(outer_box)
+                # print(inner_box)
                 frame[outer_box.coords_as_slices()] = cv2.blur(
                     frame[outer_box.coords_as_slices()], 
                     (blur_size, blur_size))
@@ -111,15 +116,15 @@ class VideoBlurrer(QThread):
         # basefile_dir=os.path.split(__file__)[0].rsplit('/',1)[0]
         # class_name=load_class_names(basefile_dir+'/coco.names')
         cars=do_detect(car_model,sized,0.4,0.6,torch.cuda.is_available())[0]
-        print("frame size:")
-        print(width,height)
+#         print("frame size:")
+#         print(width,height)
         width = image.shape[1]
         height = image.shape[0]
         new_plates=[]
         # print("licnese size:")
         # print(license_model.width,license_model.height)
         
-        print("Cars:")
+#         print("Cars:")
         for i in range(len(cars)):
             box=cars[i]
             x1 = max(0,int(box[0] * width))
@@ -131,12 +136,34 @@ class VideoBlurrer(QThread):
             diagonal=math.sqrt(pow(car_height,2)+pow(car_width,2))        
             cls_conf=box[5]
             cls_id=box[-1]
-            # if(cls_id in [2,3,5,7]) and (diagonal>=140):
-            if(cls_id in [2,3,5,7]):
+            if(cls_id in [2,3,5,7]) and (diagonal>=100):
+            # if(cls_id in [2,3,5,7]):
                 # print(box)
-                print(car_width,car_height,i)
+#                 print(car_width,car_height,i)
                 # print(x1,y1,x2,y2)
                 # print(box)
+                x_mid=int(x1+car_width/2)
+                y_mid=int(y1+car_height/2)
+#                 print("x_mid y_mid")
+#                 print(x_mid,y_mid)
+                x1=x_mid-208
+                x2=x_mid+208
+                y1=y_mid-208
+                y2=y_mid+208
+                if(y_mid<208):
+                    y1=0
+                    y2=416
+                elif(y_mid>(height-208)):
+                    y1=height-416
+                    y2=height
+                if(x_mid<208):
+                    x1=0
+                    x2=416
+                elif(x_mid>(width-208)):
+                    x1=width-416
+                    x2=width
+#                 print("crop box:")
+#                 print(x1,y1,x2,y2)
                 crop=image[y1:y2,x1:x2]
                 # rgb = (255, 0, 0)
                 
@@ -148,16 +175,22 @@ class VideoBlurrer(QThread):
             # cv2.(image,bbox)
                 for k in range(len(plates)):
                 # print(plates[k],car_height,car_width)
-                    print(plates[k])
-                    if not (abs(plates[k][0]*car_width-plates[k][2]*car_width)<10 or abs(plates[k][1]*car_height-plates[k][3]*car_height)<10 ):
-                        new_plates.append(
-                            Box((x1+plates[k][0]*car_width),
-                            (y1+plates[k][1]*car_height),
-                            (x1+plates[k][2]*car_width),
-                            (y1+plates[k][3]*car_height),
-                            cls_conf,
-                            'plate' ))
-        # print("plate:")
+#                     print("floatnbbox:")
+#                     print(plates[k][:4])
+#                     print('plate boxes:')
+#                     print([int(x1+plates[k][0]*416),
+#                             int(y1+plates[k][1]*416),
+#                             int(x1+plates[k][2]*416),
+#                             int(y1+plates[k][3]*416)])
+                    # if not (abs(plates[k][0]*416-plates[k][2]*416)<10 or abs(plates[k][1]*416-plates[k][3]*416)<10 ):
+                    new_plates.append(
+                        Box((x1+plates[k][0]*416),
+                        (y1+plates[k][1]*416),
+                        (x1+plates[k][2]*416),
+                        (y1+plates[k][3]*416),
+                        cls_conf,
+                        'plate' ))
+        # print("total plate:")
         # for plate in new_plates:
         #     print(plate)
         # # print('plates')
@@ -248,9 +281,6 @@ class VideoBlurrer(QThread):
                             y1 = max(0,int(box[1] * height))
                             x2 = int(box[2] * width)
                             y2 = int(box[3] * height)
-                            car_width=abs(x1-x2)
-                            car_height=abs(y1-y2)        
-                            cls_conf=box[5]
                             cls_id=box[6]
                             if(cls_id in [2,3,5,7]):
                                 cv2.rectangle(frame,(x1,y1),(x2,y2),(255,0,0),5)
