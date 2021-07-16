@@ -10,7 +10,6 @@ import torch
 from PySide2.QtCore import QThread, Signal
 from src.box import Box
 import math
-car_count=0
 
 class VideoBlurrer(QThread):
     setMaximum = Signal(int)
@@ -97,7 +96,7 @@ class VideoBlurrer(QThread):
         blurred = cv2.bitwise_and(temp, temp, mask=mask)
         return cv2.add(background, blurred)
 
-    def detect_identifiable_information(self, image: np.array,width,height):
+    def detect_identifiable_information(self, image: np.array,width,height,car_count):
         """
         Run plate and face detection on an input image
         :param image: input image
@@ -108,7 +107,6 @@ class VideoBlurrer(QThread):
         car_model=self.car_model
         license_model=self.detector
         sized=cv2.resize(image,(car_model.width,car_model.height))
-        global car_count
         # basefile_dir=os.path.split(__file__)[0].rsplit('/',1)[0]
         # class_name=load_class_names(basefile_dir+'/coco.names')
         cars=do_detect(car_model,sized,0.4,0.6,torch.cuda.is_available())[0]
@@ -165,7 +163,7 @@ class VideoBlurrer(QThread):
                         (y1+plates[k][3]*416),
                         cls_conf,
                         'plate' ))
-        return new_plates,cars
+        return new_plates,cars,car_count
 
     def run(self):
         """
@@ -175,6 +173,7 @@ class VideoBlurrer(QThread):
         print('File_name,Num_of_frames,Avg_Num_of_car,Time_used')
         for iter in iters:
             while (iter.hasNext()):
+                car_count=0
                 self.parameters['input_path_Cur']=iter.next()
                 # reset success and start timer
                 self.result["success"] = False
@@ -222,7 +221,7 @@ class VideoBlurrer(QThread):
                         width = frame.shape[1]
                         height = frame.shape[0]
                         last=car_count
-                        new_detections,cars = self.detect_identifiable_information(frame.copy(),width,height)
+                        new_detections,cars,car_count = self.detect_identifiable_information(frame.copy(),width,height,last)
                         for i in range(len(cars)):
                             box=cars[i]
                             x1 = max(0,int(box[0] * width))
@@ -233,7 +232,7 @@ class VideoBlurrer(QThread):
                             if(cls_id in [2,3,5,7]):
                                 cv2.rectangle(frame,(x1,y1),(x2,y2),(255,0,0),5)
                         frame = self.apply_blur(frame, new_detections)
-                        writer.write(frame)
+                        # writer.write(frame)
                         # print('Car in frame '+str(current_frame))
                         # Num_car=car_count-last
                         # print(Num_car)
@@ -261,9 +260,10 @@ class VideoBlurrer(QThread):
                 self.result["success"] = True
                 self.result["elapsed_time"] = timer() - start
                 used_time=self.result["elapsed_time"]
-                print(car_count)
+                # print(car_count)
                 avg_car=car_count/length
                 print(str(fname)+','+str(length)+','+str(avg_car)+','+str(used_time))
+
 
 
 
