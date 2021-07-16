@@ -10,7 +10,7 @@ import torch
 from PySide2.QtCore import QThread, Signal
 from src.box import Box
 import math
-
+car_count=0
 
 class VideoBlurrer(QThread):
     setMaximum = Signal(int)
@@ -48,7 +48,6 @@ class VideoBlurrer(QThread):
         :return: processed image
         """
         # gather inputs from self.parameters
-#         frame=np.copy(frame)
         blur_size = self.parameters["blur_size"]
         blur_memory = self.parameters["blur_memory"]
         roi_multi = self.parameters["roi_multi"]
@@ -57,16 +56,12 @@ class VideoBlurrer(QThread):
         self.detections = [[x[0], x[1] + 1] for x in self.detections if
                            x[1] <= blur_memory]  # throw out outdated detections, increase age by 1
         for detection in new_detections:
-            # print("before scale:")
-            # print(detection)
             scaled_detection = detection.scale(frame.shape, roi_multi)
-            # print("after scael:")
-            # print(scaled_detection)
             self.detections.append([scaled_detection, 0])
         # prepare copy and mask
         temp = frame.copy()
         mask = np.full((frame.shape[0], frame.shape[1], 1), 0, dtype=np.uint8)
-#         print("blur box:")
+        # print("blur box:")
         for detection in [x[0] for x in self.detections]:
             # two-fold blurring: softer blur on the edge of the box to look smoother and less abrupt
             outer_box = detection
@@ -74,7 +69,7 @@ class VideoBlurrer(QThread):
             # print(outer_box,inner_box)
             if detection.kind == "plate":
                 # blur in-place on frame
-#                 print(outer_box)
+                # print(outer_box)
                 # print(inner_box)
                 frame[outer_box.coords_as_slices()] = cv2.blur(
                     frame[outer_box.coords_as_slices()], 
@@ -113,11 +108,13 @@ class VideoBlurrer(QThread):
         car_model=self.car_model
         license_model=self.detector
         sized=cv2.resize(image,(car_model.width,car_model.height))
+        global car_count
         # basefile_dir=os.path.split(__file__)[0].rsplit('/',1)[0]
         # class_name=load_class_names(basefile_dir+'/coco.names')
         cars=do_detect(car_model,sized,0.4,0.6,torch.cuda.is_available())[0]
 #         print("frame size:")
 #         print(width,height)
+        
         width = image.shape[1]
         height = image.shape[0]
         new_plates=[]
@@ -126,6 +123,7 @@ class VideoBlurrer(QThread):
         
 #         print("Cars:")
         for i in range(len(cars)):
+            
             box=cars[i]
             x1 = max(0,int(box[0] * width))
             y1 = max(0,int(box[1] * height))
@@ -137,15 +135,9 @@ class VideoBlurrer(QThread):
             cls_conf=box[5]
             cls_id=box[-1]
             if(cls_id in [2,3,5,7]) and (diagonal>=100):
-            # if(cls_id in [2,3,5,7]):
-                # print(box)
-#                 print(car_width,car_height,i)
-                # print(x1,y1,x2,y2)
-                # print(box)
+                car_count+=1
                 x_mid=int(x1+car_width/2)
                 y_mid=int(y1+car_height/2)
-#                 print("x_mid y_mid")
-#                 print(x_mid,y_mid)
                 x1=x_mid-208
                 x2=x_mid+208
                 y1=y_mid-208
@@ -162,27 +154,10 @@ class VideoBlurrer(QThread):
                 elif(x_mid>(width-208)):
                     x1=width-416
                     x2=width
-#                 print("crop box:")
-#                 print(x1,y1,x2,y2)
                 crop=image[y1:y2,x1:x2]
-                # rgb = (255, 0, 0)
-                
-            # print(crop.shape)
                 crop=cv2.resize(crop,(license_model.width,license_model.height))
-                plates=do_detect(license_model,crop,0.4,0.5,torch.cuda.is_available())[0]
-                # print(plates)
-                # cv2.rectangle(image, (x1, y1), (x2, y2), rgb, 5)
-            # cv2.(image,bbox)
+                plates=do_detect(license_model,crop,0.4,0.6,torch.cuda.is_available())[0]
                 for k in range(len(plates)):
-                # print(plates[k],car_height,car_width)
-#                     print("floatnbbox:")
-#                     print(plates[k][:4])
-#                     print('plate boxes:')
-#                     print([int(x1+plates[k][0]*416),
-#                             int(y1+plates[k][1]*416),
-#                             int(x1+plates[k][2]*416),
-#                             int(y1+plates[k][3]*416)])
-                    # if not (abs(plates[k][0]*416-plates[k][2]*416)<10 or abs(plates[k][1]*416-plates[k][3]*416)<10 ):
                     new_plates.append(
                         Box((x1+plates[k][0]*416),
                         (y1+plates[k][1]*416),
@@ -190,48 +165,20 @@ class VideoBlurrer(QThread):
                         (y1+plates[k][3]*416),
                         cls_conf,
                         'plate' ))
-        # print("total plate:")
-        # for plate in new_plates:
-        #     print(plate)
-        # # print('plates')
-        # print(new_plates)
-                # plot_boxes_cv2(image,new_plates,savename='test1_'+str(i)+'.jpg',class_names=class_name)
-                # plate_boxes=[]
-                # for plate in plates:
-                #     detection_kind='plate'
-                #     plate_x1=x1+plate[0]*car_width
-                #     plate_y1=y1+plate[1]*car_height
-                #     plate_x2=x1+plate[2]*car_width
-                #     plate_y2=y1+plate[3]*car_height
-                #     plate_boxes.append(Box(plate_x1,plate_y1,plate_x2,plate_y2,cls_conf,detection_kind))
-                # print(plate_boxes)
-
-        # sized=cv2.cvtColor(sized,cv2.COLOR_BGR2RGB)
-        # self.detector
-        # results=do_detect(model,sized,self.parameters["threshold"],0.6,torch.cuda.is_available())[0]
-        # boxes = []
-        # results_img=plot_boxes_cv2(sized,results,class_names='plate')
-
-        # for res in results:
-        #     # print(res)
-        #     if res[-1]==0:
-        #         detection_kind = "plate"
-        #         boxes.append(Box(res[0]*width, res[1]*height, res[2]*width, res[3]*height, res[4], detection_kind))
-        return new_plates, cars
+        return new_plates,cars
 
     def run(self):
         """
         Write a copy of the input video stripped of identifiable information, i.e. faces and license plates
         """
         iters=self.parameters["input_path_iter_list"]
-        print('File_name,Num_of_frames,Time_used')
+        print('File_name,Num_of_frames,Avg_Num_of_car,Time_used')
         for iter in iters:
             while (iter.hasNext()):
                 self.parameters['input_path_Cur']=iter.next()
                 # reset success and start timer
                 self.result["success"] = False
                 start = timer()
-            
                 # gather inputs from self.parameters
                 
                 input_path = self.parameters["input_path_Cur"]
@@ -274,6 +221,7 @@ class VideoBlurrer(QThread):
                     if ret == True:
                         width = frame.shape[1]
                         height = frame.shape[0]
+                        last=car_count
                         new_detections,cars = self.detect_identifiable_information(frame.copy(),width,height)
                         for i in range(len(cars)):
                             box=cars[i]
@@ -286,7 +234,9 @@ class VideoBlurrer(QThread):
                                 cv2.rectangle(frame,(x1,y1),(x2,y2),(255,0,0),5)
                         frame = self.apply_blur(frame, new_detections)
                         writer.write(frame)
-                        print(current_frame)
+                        # print('Car in frame '+str(current_frame))
+                        # Num_car=car_count-last
+                        # print(Num_car)
 
                     else:
                         break
@@ -311,7 +261,9 @@ class VideoBlurrer(QThread):
                 self.result["success"] = True
                 self.result["elapsed_time"] = timer() - start
                 used_time=self.result["elapsed_time"]
-                print(str(fname)+','+str(length)+','+str(used_time))
+                print(car_count)
+                avg_car=car_count/length
+                print(str(fname)+','+str(length)+','+str(avg_car)+','+str(used_time))
 
 
 
