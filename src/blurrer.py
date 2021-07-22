@@ -232,7 +232,7 @@ class VideoBlurrer(QThread):
                             if(cls_id in [2,3,5,7]):
                                 cv2.rectangle(frame,(x1,y1),(x2,y2),(255,0,0),5)
                         frame = self.apply_blur(frame, new_detections)
-                        # writer.write(frame)
+                        writer.write(frame)
                         # print('Car in frame '+str(current_frame))
                         # Num_car=car_count-last
                         # print(Num_car)
