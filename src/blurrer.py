@@ -1,5 +1,4 @@
 import os
-import subprocess
 from timeit import default_timer as timer
 from tool.utils import *
 from tool.torch_utils import *
@@ -96,7 +95,7 @@ class VideoBlurrer(QThread):
         blurred = cv2.bitwise_and(temp, temp, mask=mask)
         return cv2.add(background, blurred)
 
-    def detect_identifiable_information(self, image: np.array,width,height,car_count):
+    def detect_identifiable_information(self, image: np.array,car_count):
         """
         Run plate and face detection on an input image
         :param image: input image
@@ -133,29 +132,31 @@ class VideoBlurrer(QThread):
             cls_conf=box[5]
             cls_id=box[-1]
             if(cls_id in [2,3,5,7]) and (diagonal>=100):
-                car_count+=1
-                x_mid=int(x1+car_width/2)
-                y_mid=int(y1+car_height/2)
-                x1=x_mid-208
-                x2=x_mid+208
-                y1=y_mid-208
-                y2=y_mid+208
-                if(y_mid<208):
-                    y1=0
-                    y2=416
-                elif(y_mid>(height-208)):
-                    y1=height-416
-                    y2=height
-                if(x_mid<208):
-                    x1=0
-                    x2=416
-                elif(x_mid>(width-208)):
-                    x1=width-416
-                    x2=width
+                if (diagonal<=588):
+                    car_count+=1
+                    x_mid=int(x1+car_width/2)
+                    y_mid=int(y1+car_height/2)
+                    x1=x_mid-208
+                    x2=x_mid+208
+                    y1=y_mid-208
+                    y2=y_mid+208
+                    if(y_mid<208):
+                        y1=0
+                        y2=416
+                    elif(y_mid>(height-208)):
+                        y1=height-416
+                        y2=height
+                    if(x_mid<208):
+                        x1=0
+                        x2=416
+                    elif(x_mid>(width-208)):
+                        x1=width-416
+                        x2=width
                 crop=image[y1:y2,x1:x2]
                 crop=cv2.resize(crop,(license_model.width,license_model.height))
                 plates=do_detect(license_model,crop,0.4,0.6,torch.cuda.is_available())[0]
                 for k in range(len(plates)):
+                    print(plates[k])
                     new_plates.append(
                         Box((x1+plates[k][0]*416),
                         (y1+plates[k][1]*416),
@@ -163,7 +164,7 @@ class VideoBlurrer(QThread):
                         (y1+plates[k][3]*416),
                         cls_conf,
                         'plate' ))
-        return new_plates,cars,car_count
+        return new_plates,car_count,cars
 
     def run(self):
         """
@@ -218,10 +219,8 @@ class VideoBlurrer(QThread):
                     ret, frame = cap.read()
                     
                     if ret == True:
-                        width = frame.shape[1]
-                        height = frame.shape[0]
                         last=car_count
-                        new_detections,cars,car_count = self.detect_identifiable_information(frame.copy(),width,height,last)
+                        new_detections,car_count,cars = self.detect_identifiable_information(frame.copy(),last)
                         for i in range(len(cars)):
                             box=cars[i]
                             x1 = max(0,int(box[0] * width))
