@@ -19,6 +19,7 @@ from deep_sort import nn_matching
 from deep_sort import preprocessing
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
+from deep_sort import simple_tracker
 import copy
 # import operator
 import matplotlib.pyplot as plt
@@ -60,7 +61,9 @@ class VideoBlurrer(QThread):
         self.encoder = gdet.create_box_encoder(model_filename, batch_size=1)
         metric = nn_matching.NearestNeighborDistanceMetric('cosine', max_cosine_distance, nn_budget)
         self.tracker = Tracker(metric)
-        self.confirmed_cars={}
+        self.car_history={}
+        # self.tracker2=simple_tracker()
+        self.plate_history={}
 
     def apply_blur(self, frame, new_detections):
         """
@@ -170,8 +173,6 @@ class VideoBlurrer(QThread):
             if not (cls_id in [2,3,5,7] or diagonal<=25):
                 removed.append(idx)
         cars=[c for i,c in enumerate(cars) if i not in removed]
-
-        detected_plates={}
         bboxes=[]
         scores=[]
         for car in cars:
@@ -197,27 +198,36 @@ class VideoBlurrer(QThread):
         
         self.tracker.predict()
         self.tracker.update(detections)
-        last_cars=copy.deepcopy(self.confirmed_cars)
-        self.confirmed_cars={}
+        last_cars=copy.deepcopy(self.car_history)
+        self.car_history={}
         for track in self.tracker.tracks:
+            
             if not track.is_confirmed() or track.time_since_update >1:
                 continue
-            bbox=track.to_tlbr()
-            delta_x1=bbox[0]-last_cars[track.track_id][0]
-            delta_y1=bbox[1]-last_cars[track.track_id][1]
-            delta_x2=bbox[2]-last_cars[track.track_id][2]
-            delta_y2=bbox[3]-last_cars[track.track_id][3]
-            self.confirmed_cars[track.track_id]=bbox.extend([delta_x1,delta_y1,delta_x2,delta_y2])
+            if len(last_cars)>0 and track.track_id in last_cars.keys():
+                bbox=track.to_tlbr()
+                delta_x1=bbox[0]-last_cars[track.track_id][0]
+                delta_y1=bbox[1]-last_cars[track.track_id][1]
+                delta_x2=bbox[2]-last_cars[track.track_id][2]
+                delta_y2=bbox[3]-last_cars[track.track_id][3]
+                self.car_history[track.track_id]=bbox.extend([delta_x1,delta_y1,delta_x2,delta_y2])
+            else:
+                bbox=track.to_tlbr()
+                self.car_history[track.track_id]=bbox.extend([0,0,0,0])
         # for track_idx,detection_idx in self.tracker.matches:
         #     self.confirmed_cars[track_idx].extend([detection_idx])
-        for key,car in self.confirmed_cars:
+
+        for key,car in self.car_history:
             car_idx=key
             # determine the car size 
                 # crop image for cars size in range of (10*10 to 416*416)
+            car_width=int(abs(car[2]-car[0]))
+            car_height=int(abs(car[3]-car[1]))
+            diagonal=math.sqrt(pow(car_height,2)+pow(car_width,2))
             if (diagonal<=588):
                 car_count+=1
-                bbox_x_mid=int(x1+car_width/2)
-                bbox_y_mid=int(y1+car_height/2)
+                bbox_x_mid=int(car[0]+car_width/2)
+                bbox_y_mid=int(car[1]+car_height/2)
                 bbox_x1=bbox_x_mid-208
                 bbox_x2=bbox_x_mid+208
                 bbox_y1=bbox_y_mid-208
@@ -238,60 +248,65 @@ class VideoBlurrer(QThread):
                 crop=image[bbox_y1:bbox_y2,bbox_x1:bbox_x2]
                 crop=cv2.resize(crop,(license_model.width,license_model.height))
                 plates=do_detect(license_model,crop,0.4,0.6,torch.cuda.is_available())[0]
-                # for plate in plates:
-                if len(plates>0):
-                    plate[0] = bbox_x1+max(0,plate[0]) * license_model.width
-                    plate[1] = bbox_y1+max(0,plate[1]) * license_model.height
-                    plate[2] = bbox_x1+min(1,plate[2]) * license_model.width
-                    plate[3] = bbox_y1+min(1,plate[3]) * license_model.height
-                    if (plate[0]>x1 and plate[2]<x2 and plate[1]>y1 and plate[3]<y2): 
-                        detected_plates[car_idx]=plate
-                    else:
-                        old_box=copy.deepcopy(detected_plates[car_idx])
-                        detected_plates[car_idx][0]=old_box[0]+car[5]
-                        detected_plates[car_idx][1]=old_box[1]+car[6]
-                        detected_plates[car_idx][2]=old_box[2]+car[7]
-                        detected_plates[car_idx][3]=old_box[3]+car[8]
+                if (len(plates>0)):
+                    temp=[]
+                    for plate in plates:
+                        plate[0] = bbox_x1+max(0,plate[0]) * license_model.width
+                        plate[1] = bbox_y1+max(0,plate[1]) * license_model.height
+                        plate[2] = bbox_x1+min(1,plate[2]) * license_model.width
+                        plate[3] = bbox_y1+min(1,plate[3]) * license_model.height
+                        
+                        temp.append(plate)
+                    self.plate_history[car_idx]=temp
+                    
                 else:
-                    old_box=copy.deepcopy(detected_plates[car_idx])
-                    detected_plates[car_idx][0]=old_box[0]+car[5]
-                    detected_plates[car_idx][1]=old_box[1]+car[6]
-                    detected_plates[car_idx][2]=old_box[2]+car[7]
-                    detected_plates[car_idx][3]=old_box[3]+car[8]
-
+                    if car_idx not in self.plate_history:
+                        continue
+                    else:
+                        temp=[]
+                        for plate in self.plate_history[car_idx]:
+                            plate[0] += delta_x1
+                            plate[1] += delta_y1
+                            plate[2] += delta_x2
+                            plate[3] += delta_y2
+                            temp.append(plate)
+                        self.plate_history[car_idx]=temp
 
 
 
             else:
                 car_count+=1
-                bbox_x_mid=int(x1+car_width/2)
-                bbox_y_mid=int(y1+car_height/2)
+                bbox_x_mid=int(car[0]+car_width/2)
+                bbox_y_mid=int(car[1]+car_height/2)
                 bbox_x1=bbox_x_mid-208
                 bbox_x2=bbox_x_mid+208
                 bbox_y1=bbox_y_mid-208
                 bbox_y2=bbox_y_mid+208
-                crop=image[y1:y2,x1:x2]
+                crop=image[bbox_y1:bbox_y2,bbox_x1:bbox_x2]
                 crop=cv2.resize(crop,(license_model.width,license_model.height))
                 plates=do_detect(license_model,crop,0.4,0.6,torch.cuda.is_available())[0]
-                for plate in plates:
-                    plate[0] = bbox_x1+max(0,plate[0]) * license_model.width
-                    plate[1] = bbox_y1+max(0,plate[1]) * license_model.height
-                    plate[2] = bbox_x1+min(1,plate[2]) * license_model.width
-                    plate[3] = bbox_y1+min(1,plate[3]) * license_model.height
-                    if (plate[0]>x1 and plate[2]<x2 and plate[1]>y1 and plate[3]<y2): 
-                        detected_plates[car_idx]=plate
-                    else:
-                        old_box=copy.deepcopy(detected_plates[car_idx])
-                        detected_plates[car_idx][0]=old_box[0]+car[5]
-                        detected_plates[car_idx][1]=old_box[1]+car[6]
-                        detected_plates[car_idx][2]=old_box[2]+car[7]
-                        detected_plates[car_idx][3]=old_box[3]+car[8]
+                if (len(plates>0)):
+                    temp=[]
+                    for plate in plates:
+                        plate[0] = bbox_x1+max(0,plate[0]) * license_model.width
+                        plate[1] = bbox_y1+max(0,plate[1]) * license_model.height
+                        plate[2] = bbox_x1+min(1,plate[2]) * license_model.width
+                        plate[3] = bbox_y1+min(1,plate[3]) * license_model.height
+                        temp.append(plate)
+                    self.plate_history[car_idx]=temp
+                    
                 else:
-                    old_box=copy.deepcopy(detected_plates[car_idx])
-                    detected_plates[car_idx][0]=old_box[0]+car[5]
-                    detected_plates[car_idx][1]=old_box[1]+car[6]
-                    detected_plates[car_idx][2]=old_box[2]+car[7]
-                    detected_plates[car_idx][3]=old_box[3]+car[8]
+                    if car_idx not in self.plate_history:
+                        continue
+                    else:
+                        temp=[]
+                        for plate in self.plate_history[car_idx]:
+                            plate[0] += delta_x1
+                            plate[1] += delta_y1
+                            plate[2] += delta_x2
+                            plate[3] += delta_y2
+                            temp.append(plate)
+                        self.plate_history[car_idx]=temp
 
         print("========================================================")
         print("detected boxs :")
@@ -307,8 +322,8 @@ class VideoBlurrer(QThread):
         #     res.append(Box(box[0],box[1],box[2],box[3],1,'plate'))
         # print("========================================================")
         res=[]
-        for plate in detected_plates:
-            res.append(plate[:4])
+        for plate in plates:
+            res.append(Box(box[0],box[1],box[2],box[3],1,'plate'))
         return res,car_count,cars
 
     def run(self):
