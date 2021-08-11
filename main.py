@@ -1,16 +1,51 @@
+
 import inspect
 import os
 import sys
-from glob import glob
-import typing
-
 from PySide2.QtCore import QDirIterator, QSettings
 from PySide2.QtWidgets import QApplication, QMainWindow, QFileDialog, QListView, QAbstractItemView, QTreeView
 from PySide2.QtWidgets import QSpinBox, QDoubleSpinBox, QLineEdit, QRadioButton, QMessageBox, QComboBox
 
 from src.blurrer import VideoBlurrer
 from src.ui_mainwindow import Ui_MainWindow
+'''
+    credits:
+    Anonymizer
+    https://github.com/understand-ai/anonymizer
+    Dashcam cleaner
+    https://github.com/tfaehse/DashcamCleaner​
+    Pytorch-yolov4
+    https://github.com/Tianxiaomo/pytorch-YOLOv4
+    deepSORT-yolov4(tensorflow)
+    https://github.com/theAIGuysCode/yolov4-deepsort
+    deepSORT(pytorch) --not implemented, need further study
+    https://github.com/ZQPei/deep_sort_pytorch
+    
+    Author & contact:
+    Ken Chan (APAS 2021 suumer intern)
+    chankwankin3@gmail.com
 
+    General workflow:
+        __init__ -> button_start_clicked -> ***Blurrer***
+
+    Current bugs in this file:
+    -some of the parameter in existing GUI is no longer used and need to be updated
+        -Remove:
+            -frame memory (deactivate it when deepSORT is activated)
+            -Detection threshold 
+            -ROI ratio
+            -inference size
+        -Add:
+            -deepSORT activation (Yes/No)
+            -threshold of size of plate need to be masked (float)
+            -max_age and n_init of deepSORT tracker (int)
+            -multiple files selection (Yes/No)
+            - show the name of currently processing file
+            -new process bar to show the process of all folders
+    -For save and load setting data, the choice of network model is not saved. User need to manually select network every time 
+    (maybe logic problem of load_weights_options, save and restore function)
+    
+'''
 
 class MainWindow(QMainWindow):
 
@@ -52,9 +87,6 @@ class MainWindow(QMainWindow):
         self.blurrer.setMaximum.connect(self.setMaximumValue)
         self.blurrer.updateProgress.connect(self.setProgress)
         self.blurrer.finished.connect(self.blurrer_finished)
-        # msg_box = QMessageBox()
-        # msg_box.setText(f"Successfully loaded {weights_name}.pt")
-        # msg_box.exec_()
 
     def button_abort_clicked(self):
         """
@@ -83,13 +115,17 @@ class MainWindow(QMainWindow):
     def button_start_clicked(self):
         """
         Callback for button_start
+        
+        the paramenters dictionary need to be updated
+        only one blurrer is created for the whole task
+        Dont blurrer for each video(initialization of blurrer takes long time and large memory to load 3 AI network)
         """
 
         self.ui.button_abort.setEnabled(True)
         self.ui.button_start.setEnabled(False)
 
-        # read inference size
-        inference_size = int(self.ui.combo_box_scale.currentText()[:-1]) * 16 / 9 # ouch again
+        # read inference size (not useful now)
+        inference_size = int(self.ui.combo_box_scale.currentText()[:-1]) * 16 / 9
 
         # set up parameters
         parameters = {
@@ -107,17 +143,25 @@ class MainWindow(QMainWindow):
             self.blurrer.start()
         else:
             print("No blurrer object!")
-        print("Blurrer started!")
+        print("Blurring started!")
 
     def button_source_clicked(self):
         """
         Callback for button_source
         """
+        # For single folder selection purpose
+
         # dialog=QFileDialog(self)
         # dialog.setFileMode()
         # source_dir_path=QFileDialog.getExistingDirectory(self,"Open File")
         # source_path, _ = QFileDialog.getOpenFileName(self, "Open Video", "", "Video Files (*.mkv *.avi *.mov *.mp4)")
         # self.source_paths_iter=QDirIterator(source_dir_path,['*.mkv','*.avi' ,'*.mov' ,'*.mp4'],flags=QDirIterator.Subdirectories)
+
+        # For multiple folders selection
+        '''
+            BUG:
+            Single click folder may choose both folder selected and its parent folder
+        '''
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.DirectoryOnly)
         file_dialog.setOption(QFileDialog.DontUseNativeDialog, True)
@@ -174,9 +218,10 @@ class MainWindow(QMainWindow):
                 name = obj.objectName()
                 value = self.settings.value(name)
                 if name=='line_source':
-                    temp_list=value.split(' , ')
-                    for path in temp_list:
-                        self.source_list.append(QDirIterator(path,['*.mkv','*.avi' ,'*.mov' ,'*.mp4'],flags=QDirIterator.Subdirectories))
+                    if value != None:
+                        temp_list=value.split(' , ')
+                        for path in temp_list:
+                            self.source_list.append(QDirIterator(path,['*.mkv','*.avi' ,'*.mov' ,'*.mp4'],flags=QDirIterator.Subdirectories))
 
                     obj.setText(value)
                 elif name=='line_target':
@@ -186,7 +231,7 @@ class MainWindow(QMainWindow):
             if isinstance(obj, QRadioButton):
                 name = obj.objectName()
                 value = self.settings.value(name)
-                if value and value == "true":  # ouch...
+                if value and value == "true":
                     obj.setChecked(True)
 
             if isinstance(obj, QComboBox):
@@ -207,9 +252,10 @@ class MainWindow(QMainWindow):
         """
         msg_box = QMessageBox()
         if self.blurrer and self.blurrer.result["success"]:
-            minutes = int(self.blurrer.result["elapsed_time"] // 60)
+            hours=int(self.blurrer.result["elapsed_time"]//3600)
+            minutes = int((self.blurrer.result["elapsed_time"]//60)%60)
             seconds = round(self.blurrer.result["elapsed_time"] % 60)
-            msg_box.setText(f"Video blurred successfully in {minutes} minutes and {seconds} seconds.")
+            msg_box.setText(f"Video blurred successfully in{hours}hours and {minutes} minutes {seconds} seconds.")
         else:
             msg_box.setText("Blurring resulted in errors.")
         msg_box.exec_()
@@ -245,7 +291,7 @@ class MainWindow(QMainWindow):
                 self.settings.setValue(name, value)
 
             if isinstance(obj, QComboBox):
-                index = obj.currentIndex()  # get current index from combobox
+                index = obj.currentIndex()
                 value = obj.itemText(index)
                 self.settings.setValue(name, value)
 
