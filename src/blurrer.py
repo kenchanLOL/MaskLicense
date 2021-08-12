@@ -22,8 +22,8 @@ import copy
 
 # libs for plate bbox drawing 
 
-# import matplotlib.pyplot as plt
-# from _collections import deque
+import matplotlib.pyplot as plt
+from _collections import deque
 
 
 class VideoBlurrer(QThread):
@@ -100,7 +100,13 @@ class VideoBlurrer(QThread):
         :param new_detections: list of newly detected faces and plates
         :return: processed image
         *** very common error message***
-        "frame[outer_box.coords_as_slices()] = cv2.blur(...... "
+        "Traceback (most recent call last):
+        File "/home/h06607/Masking_related/MaskLicense_kalman/src/blurrer.py", line 506, in run
+    
+        File "/home/h06607/Masking_related/MaskLicense_kalman/src/blurrer.py", line 139, in apply_blur
+            frame[outer_box.coords_as_slices()] = cv2.blur(
+        cv2.error: OpenCV(4.5.2) /tmp/pip-req-build-sl2aelck/opencv/modules/imgproc/src/box_filter.dispatch.cpp:446: error: (-215:Assertion failed) !_src.empty() in function 'boxFilter'"
+        
         Reason:
         -> wrong detection box size input
             -x/y_min >x/y_max
@@ -111,7 +117,7 @@ class VideoBlurrer(QThread):
         # commented codes are for frame memory
         blur_size = self.parameters["blur_size"]
         # blur_memory = self.parameters["blur_memory"]
-        roi_multi = self.parameters["roi_multi"]
+        # roi_multi = self.parameters["roi_multi"]
         # gather and process all currently relevant detections
         # self.detections = [[x[0], x[1] + 1] for x in self.detections if
         #                    x[1] <= blur_memory] 
@@ -120,22 +126,23 @@ class VideoBlurrer(QThread):
         # apply ROI scaling (tbh it is the most brute force method to cover some specific plate (e.g cross-border licenses) better
         # but it does not work well in general cases)
         # if u need to use it, ignore the suggestion on removing ROI ratio in main.py
-        for detection in new_detections:
-            scaled_detection = detection.scale(frame.shape, roi_multi)
-            self.detections.append([scaled_detection, 0])
+
+        # for detection in new_detections:
+        #     scaled_detection = detection.scale(frame.shape, roi_multi)
+        #     self.detections.append([scaled_detection, 0])
         
         # prepare copy and mask
         temp = frame.copy()
         mask = np.full((frame.shape[0], frame.shape[1], 1), 0, dtype=np.uint8)
-        # print("========================================================")
+        print("========================================================")
         # print("blur box:")
-        for detection in [x[0] for x in self.detections]:
+        for detection in new_detections:
             # two-fold blurring: softer blur on the edge of the box to look smoother and less abrupt
             outer_box = detection
 
             # Dont pass extremely small bbox here as it may round off to zero after scaling and return error in blur function later
             inner_box = detection.scale(frame.shape, 0.8)
-            # print(detection)
+            print(detection)
             frame[outer_box.coords_as_slices()] = cv2.blur(
                 frame[outer_box.coords_as_slices()], 
                 (blur_size, blur_size))
@@ -144,7 +151,7 @@ class VideoBlurrer(QThread):
                 (blur_size * 2 + 1, blur_size * 2 + 1))
             cv2.rectangle
 
-        # print("========================================================")
+        print("========================================================")
         mask_inverted = cv2.bitwise_not(mask)
         background = cv2.bitwise_and(frame, frame, mask=mask_inverted)
         blurred = cv2.bitwise_and(temp, temp, mask=mask)
@@ -244,6 +251,8 @@ class VideoBlurrer(QThread):
                 -resize to 416*416
                 -*** dont directly resize big car bbox to 416*416 (deformmation of license plate-> undetected)
             (TBH i think the small car case is just a subclass of big car when n=1, but i dont have time to check and debug it)
+            ** for version 9 plate detection AI, there are some extremely large false positive bounding box, so I use IOU to suppress it
+            ** this imply that the training dataset still need improvements to reduce false positive
             '''
             if(cls_id in [2,3,5,7]) and (diagonal>=100):
                 # crop image for cars size in range of (10*10 to 416*416)
@@ -269,18 +278,25 @@ class VideoBlurrer(QThread):
                         bbox_x2=width
                     crop=image[bbox_y1:bbox_y2,bbox_x1:bbox_x2]
                     crop=cv2.resize(crop,(license_model.width,license_model.height))
-                    plates=do_detect(license_model,crop,0.4,0.6,torch.cuda.is_available())[0]
+                    plates=do_detect(license_model,crop,0.6,0.6,torch.cuda.is_available())[0]
                     for plate in plates:
                         plate[0] = bbox_x1+max(0,plate[0]) * license_model.width
                         plate[1] = bbox_y1+max(0,plate[1]) * license_model.height
                         plate[2] = bbox_x1+min(1,plate[2]) * license_model.width
                         plate[3] = bbox_y1+min(1,plate[3]) * license_model.height
+                        plate_width=abs(plate[2]-plate[0])
+                        plate_height=abs(plate[3]-plate[1])
+                        plate_size=plate_width*plate_height
+                        iou=plate_size/(license_model.width*license_model.height*pow(1,2))
+                        if(iou>1/9):
+                            continue
                         detected_plates.append(plate)
+                    
                         
 
                 else:
                     car_count+=1
-                    max_side_length=max(x1,y1,x2,y2)
+                    max_side_length=max(car_width,car_height)
                     crop_power=math.ceil(max_side_length//416)
                     bbox_x_mid=int(x1+car_width/2)
                     bbox_y_mid=int(y1+car_height/2)
@@ -302,7 +318,7 @@ class VideoBlurrer(QThread):
                         bbox_x2=width
                     crop=image[bbox_y1:bbox_y2,bbox_x1:bbox_x2]
                     crop=cv2.resize(crop,(license_model.width,license_model.height))
-                    plates=do_detect(license_model,crop,0.4,0.6,torch.cuda.is_available())[0]
+                    plates=do_detect(license_model,crop,0.6,0.6,torch.cuda.is_available())[0]
                     # print("========================================================")
                     # print(f'plates of large car {car_count}')
                     # for plate in plates:
@@ -311,15 +327,30 @@ class VideoBlurrer(QThread):
                     #     plate_x2 = int(plate[2] * license_model.width)
                     #     plate_y2 = int(plate[3] * license_model.height)
                     #     cv2.rectangle(crop,(plate_x1,plate_y1),(plate_x2,plate_y2),(255,0,0),5)
-                    # cv2.imwrite(f'car_{car_count}.jpg',crop)
+
+                    #     cv2.imwrite(f'car_{car_count}.jpg',crop)
                     for plate in plates:
                         plate[0] = bbox_x1+max(0,plate[0]) * license_model.width*crop_power
                         plate[1] = bbox_y1+max(0,plate[1]) * license_model.height*crop_power
                         plate[2] = bbox_x1+min(1,plate[2]) * license_model.width*crop_power
                         plate[3] = bbox_y1+min(1,plate[3]) * license_model.height*crop_power
+                        plate_width=abs(plate[2]-plate[0])
+                        plate_height=abs(plate[3]-plate[1])
+                        plate_size=plate_width*plate_height
+                        iou=plate_size/(license_model.width*license_model.height*pow(crop_power,2))
+                        if(iou>1/9):
+                            continue
                         detected_plates.append(plate)
-                    # print("========================================================")
-                    
+        # print("========================================================")
+        # print("Plate bbox:")
+        # for plate in detected_plates:
+        #     print(plate)
+        #     plate_width=abs(plate[2]-plate[0])
+        #     plate_height=abs(plate[3]-plate[1])
+        #     plate_size=plate_width*plate_height
+        #     print(plate_size)
+        # print("========================================================")
+        
         # implementation of deepSORT
         bboxes=[]
         scores=[]
@@ -328,7 +359,7 @@ class VideoBlurrer(QThread):
             plate[3]=int(abs(plate[3]-plate[1]))
             plate[2]=int(abs(plate[2]-plate[0]))
             bboxes.append(plate[:4])
-            scores.append(plate[-2])
+            scores.append(plate[-2])        
         bboxes=np.array(bboxes)
         scores=np.array(scores)
         features = self.encoder(image, bboxes)
@@ -347,17 +378,19 @@ class VideoBlurrer(QThread):
         self.tracker.predict()
         self.tracker.update(detections)
         for track in self.tracker.tracks:
+            bbox=track.to_tlbr()
+            # when the prediction is out of the image, change the state of track to TrackState.Delete
             if not track.is_confirmed():
                 continue
-            bbox=track.to_tlbr()
+            
             confirmed_plates.append(bbox)
         res=[]
         # print("========================================================")
         # print("confirmed boxs :")
         for box in confirmed_plates:
             # print(box)
-            box_width=box[2]-box[0]
-            box_height=box[3]-box[1]
+            box_width=(box[2]-box[0])
+            box_height=(box[3]-box[1])
             if(box_width<=3) or (box_height<=3) or (box[2]>width) or (box[3]>height) or ((pow(box_width,2)+pow(box_height,2))<200):
                 continue
             else:
@@ -421,8 +454,9 @@ class VideoBlurrer(QThread):
                     
                     if ret == True:
                         last=car_count
-                        t1=time.time()
+                        # t1=time.time()
                         new_detections,car_count,cars = self.detect_identifiable_information(frame.copy(),last)
+                        # print car bbox
                         # for i in range(len(cars)):
                         #     box=cars[i]
                         #     x1 = max(0,int(box[0] * width))
@@ -432,22 +466,25 @@ class VideoBlurrer(QThread):
                         #     cls_id=box[6]
                         #     if(cls_id in [2,3,5,7]):
                         #         cv2.rectangle(frame,(x1,y1),(x2,y2),(255,0,0),5)
-                                                      
+                        
+                        # print plates bbox, id , size 
                         # pts = [deque(maxlen=30) for _ in range(1000)]
                         # cmap = plt.cm.get_cmap('tab20b')
                         # colors = [cmap(i)[:3] for i in np.linspace(0,1,20)]
                         # for track in self.tracker.tracks:
-                        #         if not track.is_confirmed() or track.time_since_update >1:
+                        #         if not track.is_confirmed():
                         #             continue
                         #         bbox = track.to_tlbr()
                         #         class_name= track.get_class()
                         #         color = colors[int(track.track_id) % len(colors)]
                         #         color = [i * 255 for i in color]
-
+                        #         plate_width=abs(bbox[2]-bbox[0])
+                        #         plate_height=abs(bbox[3]-bbox[1])
+                        #         plate_size=plate_width*plate_height
                         #         cv2.rectangle(frame, (int(bbox[0]),int(bbox[1])), (int(bbox[2]),int(bbox[3])), color, 2)
                         #         cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)
                         #                     +len(str(track.track_id)))*17, int(bbox[1])), color, -1)
-                        #         cv2.putText(frame, class_name+"-"+str(track.track_id), (int(bbox[0]), int(bbox[1]-10)), 0, 0.75,
+                        #         cv2.putText(frame, class_name+"-"+str(track.track_id)+"-"+str(plate_size), (int(bbox[0]), int(bbox[1]-10)), 0, 0.75,
                         #                     (255, 255, 255), 2)
 
                         #         center = (int(((bbox[0]) + (bbox[2]))/2), int(((bbox[1])+(bbox[3]))/2))
