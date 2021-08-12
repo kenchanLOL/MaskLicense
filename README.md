@@ -55,6 +55,16 @@ after data augmentation:(need more improvement)
 * shear angle (whole picture / inside bounding box)
 * blur
 
+for data augmentation, i just use roboflow to augment some of the pictures in dataset (free account limit) as a proof of work. You may use other tools to process all the images, including non-local part to generate a bigger data for AI trainning
+
+for futhre data augementation:
+
+-[ ] birgthness variation based on certain distribution
+-[ ] mosaic +blur+ brightness 
+-[ ] other data augmentation techniques mentioned in yolov4 paper e.g. cutoff 
+-[ ] random combination of data augmentation techniques
+**please be reminded that after shearing angle, u need to check or recalculate the bounding box coordinate. If u are using roboflow to generate dataset, u need to convert the _annotation.txt file into individal txt file**
+
 Version Number | original |  50% draker | mosaic+shear angle +blur
 ---------|----------|-------------|--------------------------
 ver8|:large_blue_circle:|:large_blue_circle:|:red_circle:
