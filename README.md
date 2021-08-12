@@ -38,9 +38,15 @@ rm -r OID/Dataset/train/'Vehicle registration plate'/Label/
 rm -r OID/Dataset/validation/'Vehicle registration plate'/Label/
 ```
 
-2. local car license plate dataset
+2. local car license plate dataset collection
+source: flickr (https://www.flickr.com/photos/j3tourshongkong/)
 the current dataset contain 1000 local car plates
-composition:
+### advantages
+multiple car types, different color, free to use, well-organized
+### drawback:
+fixed lens, resolution, angle and location
+
+### Original composition:
 
 car type | number of data
 ---------|---------------
@@ -49,7 +55,7 @@ truck|245
 bus|195
 other|60
 
-after data augmentation:(need more improvement) 
+### After data augmentation:(need more improvement) 
 * brightness decrease
 * mosaic
 * shear angle (whole picture / inside bounding box)
@@ -59,10 +65,11 @@ for data augmentation, i just use roboflow to augment some of the pictures in da
 
 for futhre data augementation:
 
--[ ] birgthness variation based on certain distribution
--[ ] mosaic +blur+ brightness 
--[ ] other data augmentation techniques mentioned in yolov4 paper e.g. cutoff 
--[ ] random combination of data augmentation techniques
+- [ ] birgthness variation based on certain distribution
+- [ ] mosaic +blur+ brightness 
+- [ ] other data augmentation techniques mentioned in yolov4 paper e.g. cutoff 
+- [ ] random combination of data augmentation techniques
+
 **please be reminded that after shearing angle, u need to check or recalculate the bounding box coordinate. If u are using roboflow to generate dataset, u need to convert the _annotation.txt file into individal txt file**
 
 Version Number | original |  50% draker | mosaic+shear angle +blur
