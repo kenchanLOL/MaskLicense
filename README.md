@@ -140,10 +140,14 @@ texts from tutorial page
 *step3: generate train.txt and test.txt*
 
 **noticed that in last step, the darknet author defined the folder name of training as "obj" and that of testing as "test".**
+steps if u are using my code
 1. creat 2 folders named 'obj' and 'test'
-2. create a folder named 'data' and put 'obj' and 'test' into it 
-3. put dataset for training into obj and dataset for testing into test
+2. put dataset for training into obj and dataset for testing into test
+3. create a folder named 'data' and put 'obj' and 'test' into it
 4. run test_gen.py and train_gen.py
+5. Put the files inside data folder into /darknet/data/ file
+
+*step4: run AI train
 
 
 
