@@ -135,19 +135,44 @@ texts from tutorial page
 
 ![image](https://user-images.githubusercontent.com/55791584/129152853-f353a1a3-5bf5-4689-8edf-304441077640.png)
 
-**Put obj.names and obj.data into /darknet/data/
+**Put obj.names and obj.data into /darknet/data/**
 
 *step3: generate train.txt and test.txt*
 
 **noticed that in last step, the darknet author defined the folder name of training as "obj" and that of testing as "test".**
 steps if u are using my code
+```python
+#test_gen.py
+import os
+
+image_files = []
+os.chdir(os.path.join("data", "test"))
+for filename in os.listdir(os.getcwd()):
+    if filename.endswith(".jpg"):
+        image_files.append("data/test/" + filename)
+os.chdir("..")
+with open("test.txt", "w") as outfile:
+    for image in image_files:
+        outfile.write(image)
+        outfile.write("\n")
+    outfile.close()
+os.chdir("..")
+```
 1. creat 2 folders named 'obj' and 'test'
 2. put dataset for training into obj and dataset for testing into test
 3. create a folder named 'data' and put 'obj' and 'test' into it
 4. run test_gen.py and train_gen.py
 5. Put the files inside data folder into /darknet/data/ file
 
-*step4: run AI train
-
-
+*step4: run AI train*
+```bash
+./darknet detector train data/obj.data cfg/yolov4-obj.cfg /home/h06607/darknet/backup/yolov4-objv1_6000.weights -map -show_image -clear 
+```
+format:
+`./darknet`  `mode(train/detector)` `cfg path`  `initial weight file(at least use yolov4.conv.137)`  `flags` 
+flags:
+* map: plot loss and mAP@50 in a png file
+* show_image: show the map in livetime 
+* clear : remove the epoch count in the initial weight files 
+(e.g train with yolov4-objv1_6000.weights as starting point without clear flag will directly stop as max_epoch that i used is 6000 )
 
