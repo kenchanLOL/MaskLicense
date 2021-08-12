@@ -7,7 +7,7 @@ from . import linear_assignment
 from . import iou_matching
 from .track import Track
 
-from deep_sort import preprocessing
+from deep_sort_tf import preprocessing
 
 class Tracker:
     """
@@ -39,7 +39,7 @@ class Tracker:
 
     """
 
-    def __init__(self, metric, max_iou_distance=0.6, max_age=120, n_init=2):
+    def __init__(self, metric, max_iou_distance=0.8, max_age=20, n_init=0):
         self.metric = metric
         self.max_iou_distance = max_iou_distance
         self.max_age = max_age
@@ -70,16 +70,13 @@ class Tracker:
         # Run matching cascade.
         self.matches, self.unmatched_tracks, self.unmatched_detections = \
             self._match(detections)
-        # print(unmatched_detections)
-        # Update track set.
-        # print('tracks:')
-        # print(self.tracks)
-        print('matches tracks:')
-        print(self.matches)
-        print('unmatched tracks:')
-        print(self.unmatched_tracks)
-        print('unmatched detections:')
-        print(self.unmatched_detections)
+
+        # print('matches tracks:')
+        # print(self.matches)
+        # print('unmatched tracks:')
+        # print(self.unmatched_tracks)
+        # print('unmatched detections:')
+        # print(self.unmatched_detections)
         for track_idx, detection_idx in self.matches:
             self.tracks[track_idx].update(
                 self.kf, detections[detection_idx])
@@ -127,14 +124,14 @@ class Tracker:
             i for i, t in enumerate(self.tracks) if t.is_confirmed()]
         unconfirmed_tracks = [
             i for i, t in enumerate(self.tracks) if not t.is_confirmed()]
-        print("========================================================")
-        print("confirmed_track:")
-        for k in confirmed_tracks:
-            print(self.tracks[k].to_tlbr())
-        print("unconfirmed_tracks:")
-        for k in unconfirmed_tracks:
-            print(self.tracks[k].to_tlbr())
-        print("========================================================")
+        # print("========================================================")
+        # print("confirmed_track:")
+        # for k in confirmed_tracks:
+        #     print(self.tracks[k].to_tlbr())
+        # print("unconfirmed_tracks:")
+        # for k in unconfirmed_tracks:
+        #     print(self.tracks[k].to_tlbr())
+        # print("========================================================")
 
         # Associate confirmed tracks using appearance features.
         matches_a, unmatched_tracks_a, unmatched_detections = \
