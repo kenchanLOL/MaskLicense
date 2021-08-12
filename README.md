@@ -132,6 +132,7 @@ texts from tutorial page
 **obj.names** : name list of classes
 
 **obj.data** : files that show where the darknet should get data from
+
 ![image](https://user-images.githubusercontent.com/55791584/129152853-f353a1a3-5bf5-4689-8edf-304441077640.png)
 
 **Put obj.names and obj.data into /darknet/data/
