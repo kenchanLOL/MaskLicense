@@ -15,14 +15,15 @@ for gpu and pytorch,tensorflow mixed version
 ```
 
 ## Parameters
-/home/h06607/Pictures/Screenshot from 2021-08-13 11-41-37.png
+![image](https://user-images.githubusercontent.com/55791584/129301961-d080d46e-d959-487a-ac32-276252cb4919.png)
+
 **frame memory** : replaced by deepSORT object track, initially used to mask previously detected area as the AI may fail to detect the plate in some frame
 
-**blur size** : the rate of blurring , higher the value, stronger the effect
+**blur size** : the strength of blurring , higher the value, stronger the effect
 
 **Detection threshold** : as its name implies, the threshold of conf level (currently is not used but u may add it back to do_detect() function)
 
-**ROI ratio** : scale up or down the detected bounding box (also currently deactivated)
+**ROI ratio** : scale up or down the detected bounding box (also currently deactivated in order to evaluate the real effect of AI)
 
 **inference size** : unused params (the original wirter use it to lower the resolution of input frame in order to increase runtime)
 
@@ -32,6 +33,8 @@ credit:https://colab.research.google.com/drive/11GRCzo-yKzkntLK1PwuhE4RV9nGUYLhs
 
 ### open source dataset (Open Image) -> use OIDv4 toolkit
 source:https://github.com/theAIGuysCode/OIDv4_ToolKit
+for license plate, the maximum number of image for train and validation data is around 4000 and 500 respecitively 
+
 ```bash
 python main.py downloader --classes 'Vehicle registration plate' --type_csv train --limit 4000
 python main.py downloader --classes 'Vehicle registration plate' --type_csv validation --limit 500
@@ -52,7 +55,7 @@ multiple car types, different color, free to use, well-organized
 
 fixed lens, resolution, angle and location
 
-**Original composition:**
+**Current composition:**
 
 car type | number of data
 ---------|---------------
@@ -61,7 +64,7 @@ truck|245
 bus|195
 other|60
 
-**After data augmentation:(need more improvement) **
+**After data augmentation:(need more improvementssss) **
 * brightness decrease
 * mosaic
 * shear angle (whole picture / inside bounding box)
@@ -91,7 +94,7 @@ tools: https://github.com/tzutalin/labelImg
 **tips:
 1.read the instructions on the tool github
 2.change the classes.txt before labelling
-3.open autosave and deafult label option if u are just labelling license plate
+3.open autosave and deafult label option if u are just labelling license plate (save times)
 4.choose YOLO format output before labelling
 
 ## customized darknet cfg
@@ -126,8 +129,11 @@ texts from tutorial page
 * change width and height to 416
 * change classes to 1
 * change batches to 6000 (increase this if u want to train more epoches)
-* search "yolo" in text editor, there should be 3 yolo layers in total, for each layer, change the filter into 18   <=(1+5)*3
+* search "yolo" in text editor, there should be 3 yolo layers in total, for each layer, change the filter into 18   <=`$(1+5) * 3`
+
+
 **Put the {name of model}.cfg to /darknet/cfg/**
+**My cfg file name is yolov4-obj.cfg. you may check that for reference**
 
 *step2: define obj.names and obj.data*
 
@@ -141,7 +147,7 @@ texts from tutorial page
 
 *step3: generate train.txt and test.txt*
 
-**noticed that in last step, the darknet author defined the folder name of training as "obj" and that of testing as "test".**
+**noticed that the darknet author defined the folder name of training as "obj" and testing as "test".**
 steps if u are using my code
 ```python
 #test_gen.py
