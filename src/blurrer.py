@@ -278,7 +278,7 @@ class VideoBlurrer(QThread):
                         bbox_x2=width
                     crop=image[bbox_y1:bbox_y2,bbox_x1:bbox_x2]
                     crop=cv2.resize(crop,(license_model.width,license_model.height))
-                    plates=do_detect(license_model,crop,0.6,0.6,torch.cuda.is_available())[0]
+                    plates=do_detect(license_model,crop,self.parameters['threshold'],0.6,torch.cuda.is_available())[0]
                     for plate in plates:
                         plate[0] = bbox_x1+max(0,plate[0]) * license_model.width
                         plate[1] = bbox_y1+max(0,plate[1]) * license_model.height
@@ -318,7 +318,7 @@ class VideoBlurrer(QThread):
                         bbox_x2=width
                     crop=image[bbox_y1:bbox_y2,bbox_x1:bbox_x2]
                     crop=cv2.resize(crop,(license_model.width,license_model.height))
-                    plates=do_detect(license_model,crop,0.6,0.6,torch.cuda.is_available())[0]
+                    plates=do_detect(license_model,crop,self.parameters['threshold'],0.6,torch.cuda.is_available())[0]
                     # print("========================================================")
                     # print(f'plates of large car {car_count}')
                     # for plate in plates:
