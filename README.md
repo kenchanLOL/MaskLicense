@@ -21,7 +21,7 @@ for gpu and pytorch,tensorflow mixed version
 
 **blur size** : the strength of blurring , higher the value, stronger the effect
 
-**Detection threshold** : as its name implies, the threshold of conf level (currently is not used but u may add it back to do_detect() function)
+**Detection threshold** : as its name implies, the threshold of conf level 
 
 **ROI ratio** : scale up or down the detected bounding box (also currently deactivated in order to evaluate the real effect of AI)
 
