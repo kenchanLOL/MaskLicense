@@ -11,9 +11,11 @@ for gpu and pytorch,tensorflow mixed version
   conda install -c anaconda cudatoolkit
   conda install -c conda-forge opencv
   conda install -c conda-forge pyside2
+  pip install tensorflow=2.5
 ```
 
 ## Parameters
+/home/h06607/Pictures/Screenshot from 2021-08-13 11-41-37.png
 **frame memory** : replaced by deepSORT object track, initially used to mask previously detected area as the AI may fail to detect the plate in some frame
 
 **blur size** : the rate of blurring , higher the value, stronger the effect
