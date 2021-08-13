@@ -134,7 +134,7 @@ class VideoBlurrer(QThread):
         # prepare copy and mask
         temp = frame.copy()
         mask = np.full((frame.shape[0], frame.shape[1], 1), 0, dtype=np.uint8)
-        print("========================================================")
+        # print("========================================================")
         # print("blur box:")
         for detection in new_detections:
             # two-fold blurring: softer blur on the edge of the box to look smoother and less abrupt
@@ -142,7 +142,7 @@ class VideoBlurrer(QThread):
 
             # Dont pass extremely small bbox here as it may round off to zero after scaling and return error in blur function later
             inner_box = detection.scale(frame.shape, 0.8)
-            print(detection)
+            # print(detection)
             frame[outer_box.coords_as_slices()] = cv2.blur(
                 frame[outer_box.coords_as_slices()], 
                 (blur_size, blur_size))
@@ -151,7 +151,7 @@ class VideoBlurrer(QThread):
                 (blur_size * 2 + 1, blur_size * 2 + 1))
             cv2.rectangle
 
-        print("========================================================")
+        # print("========================================================")
         mask_inverted = cv2.bitwise_not(mask)
         background = cv2.bitwise_and(frame, frame, mask=mask_inverted)
         blurred = cv2.bitwise_and(temp, temp, mask=mask)
@@ -389,6 +389,8 @@ class VideoBlurrer(QThread):
         # print("confirmed boxs :")
         for box in confirmed_plates:
             # print(box)
+            if (box[0]<0) or (box[1]<0) or (box[2]<0) or (box[3]<0):
+                continue
             box_width=(box[2]-box[0])
             box_height=(box[3]-box[1])
             if(box_width<=3) or (box_height<=3) or (box[2]>width) or (box[3]>height) or ((pow(box_width,2)+pow(box_height,2))<200):
@@ -486,10 +488,8 @@ class VideoBlurrer(QThread):
                         #                     +len(str(track.track_id)))*17, int(bbox[1])), color, -1)
                         #         cv2.putText(frame, class_name+"-"+str(track.track_id)+"-"+str(plate_size), (int(bbox[0]), int(bbox[1]-10)), 0, 0.75,
                         #                     (255, 255, 255), 2)
-
                         #         center = (int(((bbox[0]) + (bbox[2]))/2), int(((bbox[1])+(bbox[3]))/2))
                         #         pts[track.track_id].append(center)
-
                         # fps = 1./(time.time()-t1)
                         # cv2.putText(frame, "FPS: {:.2f}".format(fps), (0,30), 0, 1, (0,0,255), 2)
                         frame = self.apply_blur(frame, new_detections)
