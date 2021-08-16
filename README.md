@@ -177,7 +177,7 @@ os.chdir("..")
 ./darknet detector train data/obj.data cfg/yolov4-obj.cfg /home/h06607/darknet/backup/yolov4-objv1_6000.weights -map -show_image -clear 
 ```
 format:
-`./darknet`  `mode(train/detector)` `cfg path`  `initial weight file(at least use yolov4.conv.137)`  `flags` 
+`./darknet`  ` detector mode(train/detect)` `cfg path`  `initial weight file(at least use yolov4.conv.137)`  `flags` 
 flags:
 * map: plot loss and mAP@50 in a png file
 * show_image: show the map in livetime 
