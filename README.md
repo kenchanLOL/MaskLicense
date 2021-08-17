@@ -91,7 +91,7 @@ ver9|:large_blue_circle:|:large_blue_circle:|:large_blue_circle:
 
 tools: https://github.com/tzutalin/labelImg
 
-**tips:
+**tips:**
 1.read the instructions on the tool github
 2.change the classes.txt before labelling
 3.open autosave and deafult label option if u are just labelling license plate (save times)
