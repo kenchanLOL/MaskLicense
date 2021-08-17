@@ -184,3 +184,9 @@ flags:
 * clear : remove the epoch count in the initial weight files 
 (e.g train with yolov4-objv1_6000.weights as starting point without clear flag will directly stop as max_epoch that i used is 6000 )
 
+
+## Data
+![Screenshot from 2021-08-17 12-06-41](https://user-images.githubusercontent.com/55791584/129662084-83ccf835-fa36-474a-b4b4-c7df54d16c20.png)
+
+
+
